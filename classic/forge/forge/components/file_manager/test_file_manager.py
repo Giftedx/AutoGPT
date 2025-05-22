@@ -1,5 +1,7 @@
+import json
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -7,6 +9,7 @@ from forge.agent.base import BaseAgentSettings
 from forge.file_storage import FileStorage
 
 from . import FileManagerComponent
+from .file_manager import FileDecodingError
 
 
 @pytest.fixture()
@@ -116,3 +119,68 @@ async def test_list_files(file_manager_component: FileManagerComponent):
     non_existent_file = "non_existent_file.txt"
     files = file_manager_component.list_folder("")
     assert non_existent_file not in files
+
+
+@pytest.mark.asyncio
+async def test_read_file_unsupported_binary(
+    file_manager_component: FileManagerComponent,
+):
+    """Test reading a file type that is binary and not supported by decode_textual_file."""
+    filename = "test.unknownextension"
+    # Create a dummy file in the workspace
+    await file_manager_component.workspace.write_file(filename, "dummy binary content")
+
+    with patch(
+        "classic.forge.forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.side_effect = ValueError(
+            "Unsupported binary file format: .unknownextension"
+        )
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+        assert "Unsupported binary file format" in str(excinfo.value)
+    # Clean up the dummy file
+    await file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_charset_failure_returns_none_string(
+    file_manager_component: FileManagerComponent,
+):
+    """Test that FileDecodingError is raised if decode_textual_file returns 'None'."""
+    filename = "test_file_for_charset_failure.txt"
+    # Create a dummy file in the workspace
+    await file_manager_component.workspace.write_file(filename, "dummy content")
+
+    with patch(
+        "classic.forge.forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.return_value = "None"
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+        assert "Failed to determine encoding" in str(excinfo.value)
+        assert "Content was read as 'None'" in str(excinfo.value)
+    # Clean up the dummy file
+    await file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_malformed_json(
+    file_manager_component: FileManagerComponent,
+):
+    """Test reading a JSON file with malformed content."""
+    filename = "malformed.json"
+    # Write invalid JSON (single quotes)
+    await file_manager_component.workspace.write_file(
+        filename, "{'invalid_json': True,}"
+    )
+
+    with pytest.raises(FileDecodingError) as excinfo:
+        file_manager_component.read_file(filename)
+
+    assert f"Failed to decode {filename} as JSON" in str(excinfo.value)
+    # Check that the cause of the exception is json.JSONDecodeError
+    assert isinstance(excinfo.value.__cause__, json.JSONDecodeError)
+
+    # Clean up the dummy file
+    await file_manager_component.workspace.delete_file(filename)

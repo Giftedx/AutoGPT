@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -14,6 +15,10 @@ from forge.models.json_schema import JSONSchema
 from forge.utils.file_operations import decode_textual_file
 
 logger = logging.getLogger(__name__)
+
+
+class FileDecodingError(Exception):
+    pass
 
 
 class FileManagerConfiguration(BaseModel):
@@ -129,7 +134,23 @@ class FileManagerComponent(
             str: The contents of the file
         """
         file = self.workspace.open_file(filename, binary=True)
-        content = decode_textual_file(file, os.path.splitext(filename)[1], logger)
+        try:
+            content = decode_textual_file(file, os.path.splitext(filename)[1], logger)
+        except ValueError as e:
+            if e.args and e.args[0].startswith("Unsupported binary file format"):
+                raise FileDecodingError(
+                    f"Failed to decode {filename}: Unsupported binary file format."
+                ) from e
+            raise e
+        except json.JSONDecodeError as e:
+            raise FileDecodingError(f"Failed to decode {filename} as JSON: {e}") from e
+        except Exception as e:
+            raise FileDecodingError(f"Failed to read or decode {filename}: {e}") from e
+
+        if content == "None":
+            raise FileDecodingError(
+                f"Failed to determine encoding for {filename}. Content was read as 'None'."
+            )
 
         return content
 
