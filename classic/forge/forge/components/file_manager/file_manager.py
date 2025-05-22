@@ -12,7 +12,10 @@ from forge.agent.protocols import CommandProvider, DirectiveProvider
 from forge.command import Command, command
 from forge.file_storage.base import FileStorage
 from forge.models.json_schema import JSONSchema
-from forge.utils.file_operations import decode_textual_file
+from forge.utils.file_operations import (
+    CustomFileParsingError,  # Import the new exception
+    decode_textual_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,14 +139,17 @@ class FileManagerComponent(
         file = self.workspace.open_file(filename, binary=True)
         try:
             content = decode_textual_file(file, os.path.splitext(filename)[1], logger)
+        except json.JSONDecodeError as e:
+            raise FileDecodingError(f"Failed to decode {filename} as JSON: {e}") from e
+        except CustomFileParsingError as e: # New handler
+            raise FileDecodingError(f"Failed to parse file {filename}: {e}") from e
         except ValueError as e:
             if e.args and e.args[0].startswith("Unsupported binary file format"):
                 raise FileDecodingError(
                     f"Failed to decode {filename}: Unsupported binary file format."
                 ) from e
-            raise e
-        except json.JSONDecodeError as e:
-            raise FileDecodingError(f"Failed to decode {filename} as JSON: {e}") from e
+            # Wrap other ValueErrors for consistency
+            raise FileDecodingError(f"Failed to decode {filename}: {e}") from e
         except Exception as e:
             raise FileDecodingError(f"Failed to read or decode {filename}: {e}") from e
 

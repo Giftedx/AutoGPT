@@ -7,6 +7,14 @@ import pytest
 
 from forge.agent.base import BaseAgentSettings
 from forge.file_storage import FileStorage
+from forge.utils.file_operations import (
+    CustomDocxParsingError,
+    CustomPdfParsingError,
+    CustomYamlParsingError,
+    CustomXmlParsingError,
+    CustomLatexParsingError, # Added
+    CustomTextDecodingError, # Added
+)
 
 from . import FileManagerComponent
 from .file_manager import FileDecodingError
@@ -131,7 +139,7 @@ async def test_read_file_unsupported_binary(
     await file_manager_component.workspace.write_file(filename, "dummy binary content")
 
     with patch(
-        "classic.forge.forge.components.file_manager.file_manager.decode_textual_file"
+        "forge.components.file_manager.file_manager.decode_textual_file"
     ) as mock_decode_textual_file:
         mock_decode_textual_file.side_effect = ValueError(
             "Unsupported binary file format: .unknownextension"
@@ -140,7 +148,103 @@ async def test_read_file_unsupported_binary(
             file_manager_component.read_file(filename)
         assert "Unsupported binary file format" in str(excinfo.value)
     # Clean up the dummy file
-    await file_manager_component.workspace.delete_file(filename)
+    file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_latex_parsing_error(
+    file_manager_component: FileManagerComponent,
+):
+    """Test that CustomLatexParsingError from decode_textual_file is wrapped."""
+    filename = "test.tex"
+    # Create a dummy file in the workspace so open_file succeeds
+    await file_manager_component.workspace.write_file(filename, "dummy latex content")
+
+    mock_error = CustomLatexParsingError("mocked latex parsing error")
+    with patch(
+        "forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.side_effect = mock_error
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+        
+        assert excinfo.value.__cause__ is mock_error
+        assert f"Failed to parse file {filename}: {mock_error}" == str(excinfo.value)
+
+    # Clean up the dummy file
+    file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_text_decoding_error(
+    file_manager_component: FileManagerComponent,
+):
+    """Test that CustomTextDecodingError from decode_textual_file is wrapped."""
+    filename = "test.txt" # Using .txt, but could be any file type for this error
+    # Create a dummy file in the workspace so open_file succeeds
+    await file_manager_component.workspace.write_file(filename, "dummy text content")
+
+    mock_error = CustomTextDecodingError("mocked text decoding error")
+    with patch(
+        "forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.side_effect = mock_error
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+
+        assert excinfo.value.__cause__ is mock_error
+        assert f"Failed to parse file {filename}: {mock_error}" == str(excinfo.value)
+
+    # Clean up the dummy file
+    file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_yaml_parsing_error(
+    file_manager_component: FileManagerComponent,
+):
+    """Test that CustomYamlParsingError from decode_textual_file is wrapped."""
+    filename = "test.yaml"
+    # Create a dummy file in the workspace so open_file succeeds
+    await file_manager_component.workspace.write_file(filename, "dummy yaml content")
+
+    mock_error = CustomYamlParsingError("mocked yaml error")
+    with patch(
+        "forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.side_effect = mock_error
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+        
+        assert excinfo.value.__cause__ is mock_error
+        assert f"Failed to parse file {filename}: {mock_error}" == str(excinfo.value)
+
+    # Clean up the dummy file
+    file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_xml_parsing_error(
+    file_manager_component: FileManagerComponent,
+):
+    """Test that CustomXmlParsingError from decode_textual_file is wrapped."""
+    filename = "test.xml"
+    # Create a dummy file in the workspace so open_file succeeds
+    await file_manager_component.workspace.write_file(filename, "dummy xml content")
+
+    mock_error = CustomXmlParsingError("mocked xml error")
+    with patch(
+        "forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.side_effect = mock_error
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+
+        assert excinfo.value.__cause__ is mock_error
+        assert f"Failed to parse file {filename}: {mock_error}" == str(excinfo.value)
+
+    # Clean up the dummy file
+    file_manager_component.workspace.delete_file(filename)
 
 
 @pytest.mark.asyncio
@@ -153,7 +257,7 @@ async def test_read_file_charset_failure_returns_none_string(
     await file_manager_component.workspace.write_file(filename, "dummy content")
 
     with patch(
-        "classic.forge.forge.components.file_manager.file_manager.decode_textual_file"
+        "forge.components.file_manager.file_manager.decode_textual_file"
     ) as mock_decode_textual_file:
         mock_decode_textual_file.return_value = "None"
         with pytest.raises(FileDecodingError) as excinfo:
@@ -161,7 +265,7 @@ async def test_read_file_charset_failure_returns_none_string(
         assert "Failed to determine encoding" in str(excinfo.value)
         assert "Content was read as 'None'" in str(excinfo.value)
     # Clean up the dummy file
-    await file_manager_component.workspace.delete_file(filename)
+    file_manager_component.workspace.delete_file(filename)
 
 
 @pytest.mark.asyncio
@@ -170,7 +274,7 @@ async def test_read_file_malformed_json(
 ):
     """Test reading a JSON file with malformed content."""
     filename = "malformed.json"
-    # Write invalid JSON (single quotes)
+    # Write invalid JSON (single quotes are invalid in JSON strings/keys)
     await file_manager_component.workspace.write_file(
         filename, "{'invalid_json': True,}"
     )
@@ -183,4 +287,52 @@ async def test_read_file_malformed_json(
     assert isinstance(excinfo.value.__cause__, json.JSONDecodeError)
 
     # Clean up the dummy file
-    await file_manager_component.workspace.delete_file(filename)
+    file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_pdf_parsing_error(
+    file_manager_component: FileManagerComponent,
+):
+    """Test that CustomPdfParsingError from decode_textual_file is wrapped."""
+    filename = "test.pdf"
+    # Create a dummy file in the workspace so open_file succeeds
+    await file_manager_component.workspace.write_file(filename, "dummy pdf content")
+
+    mock_error = CustomPdfParsingError("mocked pdf error")
+    with patch(
+        "forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.side_effect = mock_error
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+        
+        assert excinfo.value.__cause__ is mock_error
+        assert f"Failed to parse file {filename}: {mock_error}" == str(excinfo.value)
+
+    # Clean up the dummy file
+    file_manager_component.workspace.delete_file(filename)
+
+
+@pytest.mark.asyncio
+async def test_read_file_docx_parsing_error(
+    file_manager_component: FileManagerComponent,
+):
+    """Test that CustomDocxParsingError from decode_textual_file is wrapped."""
+    filename = "test.docx"
+    # Create a dummy file in the workspace so open_file succeeds
+    await file_manager_component.workspace.write_file(filename, "dummy docx content")
+
+    mock_error = CustomDocxParsingError("mocked docx error")
+    with patch(
+        "forge.components.file_manager.file_manager.decode_textual_file"
+    ) as mock_decode_textual_file:
+        mock_decode_textual_file.side_effect = mock_error
+        with pytest.raises(FileDecodingError) as excinfo:
+            file_manager_component.read_file(filename)
+
+        assert excinfo.value.__cause__ is mock_error
+        assert f"Failed to parse file {filename}: {mock_error}" == str(excinfo.value)
+
+    # Clean up the dummy file
+    file_manager_component.workspace.delete_file(filename)
