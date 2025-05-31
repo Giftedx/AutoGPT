@@ -230,24 +230,11 @@ def test_is_file_binary_fn_empty_file():
 
 
 def test_is_file_binary_fn_pointer_reset_with_initial_offset():
-    """Test file pointer reset when initial position is not 0."""
-    content = b"offset_data_then_\x00_in_chunk_and_more_data_after" * 200  # Ensure content > CHUNK_SIZE
+    """Test that the file pointer resets correctly when the initial position is not 0."""
+    content = b"aaaaa\x00bbbb"  # Null byte at index 5
     file = io.BytesIO(content)
     initial_pos = 5
     file.seek(initial_pos)
-    # Ensure the null byte is after initial_pos but within CHUNK_SIZE from initial_pos
-    # This test assumes the function reads CHUNK_SIZE from the current position.
-    # If is_file_binary_fn always seeks to 0 first, this test needs adjustment.
-    # Based on the implementation, it reads from the current position.
-    # Place a null byte such that it's read if CHUNK_SIZE is read from initial_pos
-    # For simplicity, let's ensure the content has a null byte early enough.
-    # Re-creating content for clarity in this specific test's goal:
-    content_with_specific_null = b"aaaaa" + b"b\x00ccc" * (CHUNK_SIZE // 5) # Null byte at pos 6, 11, 16...
-    file = io.BytesIO(content_with_specific_null)
-    file.seek(initial_pos) # initial_pos = 5
-
-    # The first null byte is at index 6.
-    # If CHUNK_SIZE is read from pos 5, byte at index 6 will be read.
     assert is_file_binary_fn(file) is True
     assert file.tell() == initial_pos
 
