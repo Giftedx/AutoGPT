@@ -227,7 +227,6 @@ def is_file_binary_fn(file: BinaryIO) -> bool:
     Returns:
         bool: True if a null byte is found in the initial chunk, False otherwise.
     """
-    CHUNK_SIZE = 4096  # Read an initial chunk to check for binary content
     original_position = file.tell()
     try:
         # Read a chunk of the file. This is a heuristic, as checking the entire
