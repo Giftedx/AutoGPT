@@ -151,6 +151,8 @@ class FileManagerComponent(
             # Wrap other ValueErrors for consistency
             raise FileDecodingError(f"Failed to decode {filename}: {e}") from e
         except Exception as e:
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
             raise FileDecodingError(f"Failed to read or decode {filename}: {e}") from e
 
         if content == "None":
